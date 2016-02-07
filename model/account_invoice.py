@@ -40,6 +40,15 @@ class AccountInvoice(models.Model):
                 palat=[val01[i:i+5] for i in range(0, len(val01), 5)]
                 return " ".join(palat)  # Recommended format for ref number 
         return val01
+    
+    def __viitenumeron_tarkiste(self,viitenumero_raaka):
+        """palauta annetun tarkisteettoman viitenumeron perään kuuluva tarkistenumero"""
+        kertoimet = (7, 3, 1)
+        viitenumero_raaka = viitenumero_raaka.replace(' ', '')
+        nrot_kaanteinen = map(int, viitenumero_raaka[::-1])
+        tulosumma = sum(kertoimet[i % 3] * x for i, x in enumerate(nrot_kaanteinen))
+        return (10 - (tulosumma % 10)) % 10
+    
 
     @api.constrains('ref_number')
     def _checkref(self):
@@ -60,8 +69,7 @@ class AccountInvoice(models.Model):
                             return
                         numberpart=val01[:-1]
                         checksum=val01[-1:]
-                        checksum_ok = (10 - (sum((7, 3, 1)[idx % 3] * int(val)
-                                       for idx, val in enumerate(numberpart))) % 10) %10
+                        checksum_ok = self.__viitenumeron_tarkiste(numberpart)
                         if int(checksum)!=checksum_ok:
                             errmsg=_("Ref number is invalid last digit (checksum) is %d but it should be %d"%(int(checksum),checksum_ok))
                             return 
