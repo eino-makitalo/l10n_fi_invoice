@@ -24,6 +24,8 @@ from openerp import models, fields, api
 from openerp.tools.translate import _
 import re
 import logging
+from openerp.exceptions import Warning,UserError, ValidationError
+
 
 log = logging.getLogger(__name__)
 
@@ -31,21 +33,47 @@ log = logging.getLogger(__name__)
 class AccountInvoice(models.Model):
     _inherit = 'account.invoice'
 
-    @api.one
-    @api.depends('number', 'state')
-    def _compute_ref_number(self):
-        if self.number:
-            invoice_number = re.sub(r'\D', '', self.number)
-            checksum = sum((7, 3, 1)[idx % 3] * int(val)
-                           for idx, val in enumerate(invoice_number[::-1]))
-            self.ref_number = invoice_number + str((10 - (checksum % 10)) % 10)
-            self.invoice_number = invoice_number
-        else:
-            self.invoice_number = False
-            self.ref_number = False
+    def _formatref(callback,val01):
+        if val01:
+            val01=val01.replace(u' ','')            
+            if len(val01)>5:
+                palat=[val01[i:i+5] for i in range(0, len(val01), 5)]
+                return " ".join(palat)  # Recommended format for ref number 
+        return val01
+
+    @api.constrains('ref_number')
+    def _checkref(self):
+        errmsg=None
+        try:
+            for record in self:
+                if record.ref_number==False:
+                    return
+                if len(record.ref_number.strip())>0:
+                    # only numbers and spaces expected
+                    val01=self.ref_number.strip()
+                    val01=val01.replace(u' ','')
+                    if len(val01)<2:
+                        errmsg=_("Too short ref number. Smallest possible is 13 (last digit is checksum)")
+                    if val01.isdigit():
+                        if len(val01)>20:
+                            errmsg=_("Ref number can be max 20 digits")
+                            return
+                        numberpart=val01[:-1]
+                        checksum=val01[-1:]
+                        checksum_ok = (10 - (sum((7, 3, 1)[idx % 3] * int(val)
+                                       for idx, val in enumerate(numberpart))) % 10) %10
+                        if int(checksum)!=checksum_ok:
+                            errmsg=_("Ref number is invalid last digit (checksum) is %d but it should be %d"%(int(checksum),checksum_ok))
+                            return 
+                    else:
+                        errmsg= _("Ref number must be only digits and spaces")
+                        return
+        finally:
+            if errmsg: 
+                raise ValidationError(errmsg)
 
     @api.one
-    def _compute_barcode_string(self):
+    def _compute_barcode_string(self):        
         primary_bank_account = self.partner_bank_id or \
             self.company_id.partner_id.bank_ids and self.company_id.partner_id.bank_ids[0]
         if (self.amount_total and primary_bank_account.acc_number
@@ -56,7 +84,8 @@ class AccountInvoice(models.Model):
             amount_total_string = amount_total_string.zfill(9)
             receiver_bank_account = re\
                 .sub("[^0-9]", "", str(primary_bank_account.acc_number))
-            ref_number_filled = self.ref_number.zfill(20)
+            rn=self.ref_number.replace(' ','')
+            ref_number_filled = rn.zfill(20)
             self.barcode_string = '4' \
                                   + receiver_bank_account \
                                   + amount_total_string[:-3] \
@@ -65,23 +94,17 @@ class AccountInvoice(models.Model):
                                   + self.date_due[2:4] \
                                   + self.date_due[5:-3] \
                                   + self.date_due[-2:]
+            
         else:
             self.barcode_string = False
 
-    invoice_number = fields.Char(
-        'Invoice number',
-        compute='_compute_ref_number',
-        store=True,
-        help=_('Identifier number used to refer to this invoice in '
-               'accordance with https://www.fkl.fi/teemasivut/sepa/'
-               'tekninen_dokumentaatio/Dokumentit/kotimaisen_viitte'
-               'en_rakenneohje.pdf')
-    )
 
     ref_number = fields.Char(
         'Reference Number',
-        compute='_compute_ref_number',
         store=True,
+        translate=_formatref,
+        readonly=True,
+        states={'draft': [('readonly', False)]},
         help=_('Invoice reference number in accordance with https://'
                'www.fkl.fi/teemasivut/sepa/tekninen_dokumentaatio/Do'
                'kumentit/kotimaisen_viitteen_rakenneohje.pdf')
