@@ -123,7 +123,8 @@ class AccountInvoice(models.Model):
         help=_('The date when the invoiced product or service was considered '
                'delivered, for taxation purposes.')
     )
-
+    
+    @api.depends('partner_bank_id', 'company_id','amount_total','ref_number')
     barcode_string = fields.Char(
         'Barcode String',
         compute='_compute_barcode_string',
