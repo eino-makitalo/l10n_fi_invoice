@@ -26,6 +26,8 @@ import re
 import logging
 from openerp.exceptions import Warning,UserError, ValidationError
 
+from checkref import calc_checksum
+
 
 log = logging.getLogger(__name__)
 
@@ -41,13 +43,6 @@ class AccountInvoice(models.Model):
                 return " ".join(palat)  # Recommended format for ref number 
         return val01
     
-    def __viitenumeron_tarkiste(self,viitenumero_raaka):
-        """palauta annetun tarkisteettoman viitenumeron perään kuuluva tarkistenumero"""
-        kertoimet = (7, 3, 1)
-        viitenumero_raaka = viitenumero_raaka.replace(' ', '')
-        nrot_kaanteinen = map(int, viitenumero_raaka[::-1])
-        tulosumma = sum(kertoimet[i % 3] * x for i, x in enumerate(nrot_kaanteinen))
-        return (10 - (tulosumma % 10)) % 10
     
 
     @api.constrains('ref_number')
@@ -69,7 +64,7 @@ class AccountInvoice(models.Model):
                             return
                         numberpart=val01[:-1]
                         checksum=val01[-1:]
-                        checksum_ok = self.__viitenumeron_tarkiste(numberpart)
+                        checksum_ok = calc_checksum(numberpart)
                         if int(checksum)!=checksum_ok:
                             errmsg=_("Ref number is invalid last digit (checksum) is %d but it should be %d"%(int(checksum),checksum_ok))
                             return 
@@ -80,7 +75,7 @@ class AccountInvoice(models.Model):
             if errmsg: 
                 raise ValidationError(errmsg)
 
-    @api.one
+    @api.depends('partner_bank_id', 'company_id', 'amount_total', 'ref_number')
     def _compute_barcode_string(self):        
         primary_bank_account = self.partner_bank_id or \
             self.company_id.partner_id.bank_ids and self.company_id.partner_id.bank_ids[0]
@@ -106,7 +101,11 @@ class AccountInvoice(models.Model):
         else:
             self.barcode_string = False
 
-
+    @api.depends('ref_number')
+    def _clean_refnum(self):
+        for record in self:
+            record.ref_number_clean=record.ref_number.replace(' ','')
+            
     ref_number = fields.Char(
         'Reference Number',
         store=True,
@@ -117,6 +116,12 @@ class AccountInvoice(models.Model):
                'www.fkl.fi/teemasivut/sepa/tekninen_dokumentaatio/Do'
                'kumentit/kotimaisen_viitteen_rakenneohje.pdf')
     )
+    
+    ref_number_clean = fields.Char(
+        'Reference Number without any space',
+        store=True,
+        compute='_clean_refnum'
+    )
 
     date_delivered = fields.Date(
         'Date delivered',
@@ -124,9 +129,9 @@ class AccountInvoice(models.Model):
                'delivered, for taxation purposes.')
     )
     
-    @api.depends('partner_bank_id', 'company_id','amount_total','ref_number')
+    
     barcode_string = fields.Char(
-        'Barcode String',
+	'Barcode String',
         compute='_compute_barcode_string',
         help=_('https://www.fkl.fi/teemasivut/sepa/tekninen_dokumentaatio/Dok'
                'umentit/Pankkiviivakoodi-opas.pdf')

@@ -34,7 +34,7 @@ class AccountBankStatementLineFinnishRefNumber(models.Model):
         refnum = self.ref.replace(' ','')
         match_invoices = self.env['account.invoice']
         #invoice_found=match_invoices.search([('ref_number', '=', refnum), ('reconciled', '=', False)], limit=2)
-        invoice_found=match_invoices.search([('ref_number', '=', refnum) ], limit=2)
+        invoice_found=match_invoices.search([('ref_number_clean', '=', refnum),('state','=','open') ], limit=2)
         if len(invoice_found)!=1:
             return super(AccountBankStatementLineFinnishRefNumber,self).auto_reconcile()
 
@@ -44,10 +44,13 @@ class AccountBankStatementLineFinnishRefNumber(models.Model):
         move_id=invoice_found.move_id.id
 
         # Time to fetch right line
+        # How to compare statement line amount and move lines amount
+        amount_domain_maker = self._get_domain_maker_move_line_amount()
+        equal_amount_domain = amount_domain_maker('=', self.amount_currency or self.amount)
         
         
         # Look just these IDS
-        domain = [('move_id', '=', move_id)]
+        domain = equal_amount_domain+[('move_id', '=', move_id)]
         match_recs = self.get_move_lines_for_reconciliation(limit=2, additional_domain=domain, overlook_partner=True)
 
 
