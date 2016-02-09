@@ -104,10 +104,11 @@ class AccountInvoice(models.Model):
     @api.depends('ref_number')
     def _clean_refnum(self):
         for record in self:
-            record.ref_number_clean=record.ref_number.replace(' ','')
+            if record.ref_number:
+                record.ref_number_clean=record.ref_number.replace(' ','')
             
     ref_number = fields.Char(
-        'Reference Number',
+        string=_("Reference number"),
         store=True,
         translate=_formatref,
         readonly=True,

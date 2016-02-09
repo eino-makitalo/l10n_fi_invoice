@@ -7,11 +7,11 @@ import logging
 
 from openerp.exceptions import UserError
 
-class AccountBankStatementWithFinnishRefnumber(models.Model):
-    _inherit = "account.bank.statement"
-    @api.multi
-    def reconciliation_widget_preprocess(self):   
-        return super(AccountBankStatementWithFinnishRefnumber, self).reconciliation_widget_preprocess()    
+#class AccountBankStatementWithFinnishRefnumber(models.Model):
+#   _inherit = "account.bank.statement"
+#    @api.multi
+#    def reconciliation_widget_preprocess(self):   
+#        return super(AccountBankStatementWithFinnishRefnumber, self).reconciliation_widget_preprocess()    
  
 class AccountBankStatementLineFinnishRefNumber(models.Model):
     """account.invoice .... refnumber -- statement reference  reconile=False
@@ -23,11 +23,32 @@ class AccountBankStatementLineFinnishRefNumber(models.Model):
     4) jos näitä rivejä on vain yksi valitse se...
     """ 
     _inherit = "account.bank.statement.line"
+
+
+    def get_reconciliation_proposition(self, excluded_ids=None):
+        """ Propose with same reference number if any"""
+        refnum = self.ref.replace(' ','')
+        match_invoices = self.env['account.invoice']
+        invoice_found=match_invoices.search([('ref_number_clean', '=', refnum),('state','=','open') ], limit=2)
+        if len(invoice_found)!=1:
+            return super(AccountBankStatementLineFinnishRefNumber,self).get_reconciliation_proposition(excluded_ids)
+        match_recs = self.env['account.move.line']
+        
+        # Check move id where referene is
+        move_id=invoice_found.move_id.id
+        domain = [('move_id', '=', move_id)]
+        mv_lines = self.get_move_lines_for_reconciliation(excluded_ids=excluded_ids, limit=5, additional_domain=domain)
+        ret= super(AccountBankStatementLineFinnishRefNumber,self).get_reconciliation_proposition(excluded_ids=mv_lines.ids)
+        for line in mv_lines:
+            ret = (line  | ret)
+        return ret
+        
+    
     @api.multi
     def auto_reconcile(self):
         """ Very Ugly way but in Finland we use just reference numbers to match payments... so we try this approach first
             Try to automatically reconcile the statement.line ; return the counterpart journal entry/ies if the automatic reconciliation succeeded, False otherwise.
-            TODO : this method could be greatly improved and made extensible
+            TODO : this method could be greatly improved and made extensible  - I totally agree :-)
         """
         done=False
         self.ensure_one()
