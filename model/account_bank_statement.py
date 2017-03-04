@@ -63,17 +63,10 @@ class AccountBankStatementLineFinnishRefNumber(models.Model):
 
         # Check move id where referene is
         move_id=invoice_found.move_id.id
-
-        # Time to fetch right line
-        # How to compare statement line amount and move lines amount
-        amount_domain_maker = self._get_domain_maker_move_line_amount()
-        equal_amount_domain = amount_domain_maker('=', self.amount_currency or self.amount)
-        
-        
+                
         # Look just these IDS
-        domain = equal_amount_domain+[('move_id', '=', move_id)]
+        domain = [('move_id', '=', move_id)]
         match_recs = self.get_move_lines_for_reconciliation(limit=2, additional_domain=domain, overlook_partner=True)
-
 
         if not match_recs:
             return super(AccountBankStatementLineFinnishRefNumber,self).auto_reconcile()

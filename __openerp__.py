@@ -22,7 +22,7 @@
 # noinspection PyStatementEffect
 {
     "name": "Finnish Invoice",
-    "version": "0.3.3",
+    "version": "0.3.4",
     "author": "Avoin.Systems",
     "category": "Localization",
     "website": "http://avoin.systems",
